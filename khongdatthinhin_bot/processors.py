@@ -17,8 +17,8 @@ def handle_thongbao(bot, update, state):
         return
     chat_id = chat.get_id()
     # Chỉ cho phép admin gửi lệnh này
-    admin_ids = [123456789, 8057576507]  # <-- Thay các số này bằng chat_id admin thực tế của bạn
-    if chat_id not in admin_ids:
+    admin_ids = [8057576507]  # <-- Thay các số này bằng chat_id admin thực tế của bạn
+    if int(chat_id) not in [int(i) for i in admin_ids]:
         bot.sendMessage(chat_id, "Bạn không có quyền gửi thông báo.")
         return
     send_daily_reminder(bot)
@@ -30,8 +30,15 @@ def send_daily_reminder(bot, message_text=None, user_id_list=None):
         message_text = "Nhắc nhở: ai chưa đặt thì đặt món ăn trước 9h10 nhé"
     # Lấy danh sách user id nếu chưa truyền vào
     if user_id_list is None:
-        user_id_list = list(Employee.objects.filter(name__isnull=False, telegram_chat__telegram_id__isnull=False).values_list('telegram_chat__telegram_id', flat=True))
-    for chat_id in user_id_list:
+        # Lấy tất cả user đã đăng ký
+        all_users = Employee.objects.filter(name__isnull=False, telegram_chat__telegram_id__isnull=False)
+        # Lấy danh sách user đã đặt món hôm nay
+        today = timezone.now().date()
+        ordered_user_ids = set(int(i) for i in Order.objects.filter(created_at__date=today).values_list('employee__telegram_chat__telegram_id', flat=True) if i is not None)
+        # Lọc ra những user chưa đặt món, so sánh kiểu int và loại None
+        user_id_list = [int(emp.telegram_chat.telegram_id) for emp in all_users if emp.telegram_chat.telegram_id is not None and int(emp.telegram_chat.telegram_id) not in ordered_user_ids]
+    unique_user_ids = set(user_id_list)
+    for chat_id in unique_user_ids:
         try:
             bot.sendMessage(chat_id, message_text)
         except Exception:
@@ -162,7 +169,7 @@ def collect_order_item(bot, update, state):
     except Exception:
         pass
     # Nếu đã quá 9h30 và menu đã được cập nhật trước 9h30 hôm nay thì khoá đặt món
-    lock_time = now_vn.replace(hour=9, minute=00, second=0, microsecond=0)
+    lock_time = now_vn.replace(hour=9, minute=30, second=0, microsecond=0)
     if now_vn > lock_time:
         if menu_last_updated is not None:
             # Nếu menu cập nhật trước 9h30 hôm nay thì khoá, còn nếu sau thì mở cho tới 9h30 hôm sau
