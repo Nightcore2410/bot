@@ -212,9 +212,9 @@ def collect_order_item(bot, update, state):
         menu_item, created = MenuItem.objects.get_or_create(name=menu_name)
         menu_item.is_active = True
         menu_item.save()
-    # Xoá tất cả OrderItem cũ của order này (chỉ giữ 1 món duy nhất)
+    # Đảm bảo mỗi order chỉ có 1 OrderItem duy nhất (xóa tất cả OrderItem cũ của order này)
     OrderItem.objects.filter(order=order).delete()
-    # Tạo OrderItem mới
+    # Tạo OrderItem mới (chỉ 1 món cho mỗi order)
     order_item = OrderItem.objects.create(order=order, menu_item=menu_item, quantity=1)
     bot.sendMessage(chat_id, f"Bạn đã đặt món: \n- {menu_name} \n\nChọn lại số nếu muốn đặt lại món.\nKhông thể chọn lại sau 9h")
 
