@@ -37,95 +37,7 @@ def send_daily_reminder(bot, message_text=None, user_id_list=None):
         ordered_user_ids = set(int(i) for i in Order.objects.filter(created_at__date=today).values_list('employee__telegram_chat__telegram_id', flat=True) if i is not None)
         # Lọc ra những user chưa đặt món, so sánh kiểu int và loại None
         user_id_list = [int(emp.telegram_chat.telegram_id) for emp in all_users if emp.telegram_chat.telegram_id is not None and int(emp.telegram_chat.telegram_id) not in ordered_user_ids]
-    unique_user_ids = set(user_id_list)
-    for chat_id in unique_user_ids:
-        try:
-            bot.sendMessage(chat_id, message_text)
-        except Exception:
-            pass
 
-# --- /start ---
-@processor(state_manager, from_states=state_types.All, update_types=['message'])
-def handle_start(bot, update, state):
-    message = update.get_message()
-    chat = update.get_chat()
-    if message is None or message.get_text() is None or message.get_text().strip() != "/start":
-        return
-    # Chỉ xử lý nếu là chat cá nhân (private)
-    if chat.get_type() != 'private':
-        return
-    chat_id = chat.get_id()
-    db_chat, _ = TelegramChat.objects.get_or_create(telegram_id=chat_id)
-    employee, created = Employee.objects.get_or_create(telegram_chat=db_chat)
-    if created or not employee.name:
-        bot.sendMessage(chat_id, "Chào bạn! Vui lòng cho tôi biết tên của bạn.")
-        state.set_name("ASK_NAME")
-        state.save()
-    else:
-        bot.sendMessage(chat_id, f"Xin chào {employee.name}!")
-        # Gửi menu hiện tại nếu có
-        try:
-            with open('current_menu.txt', 'r', encoding='utf-8') as f:
-                menu_text = f.read().strip()
-            if menu_text:
-                bot.sendMessage(chat_id, f"Menu hôm nay:\n{menu_text}\n\nVui lòng trả lời số thứ tự món bạn muốn đặt.")
-        except Exception:
-            pass
-
-# --- Lưu tên ---
-@processor(state_manager, from_states=['ASK_NAME'], update_types=['message'])
-def save_name(bot, update, state):
-    chat = update.get_chat()
-    if chat.get_type() != 'private':
-        return
-    chat_id = chat.get_id()
-    name = update.get_message().get_text().strip()
-    db_chat = TelegramChat.objects.get(telegram_id=chat_id)
-    employee = Employee.objects.get(telegram_chat=db_chat)
-    employee.name = name
-    employee.save()
-    bot.sendMessage(chat_id, f"Cảm ơn bạn, {name}! Bạn đã đăng ký thành công.")
-    # Gửi menu hiện tại nếu có
-    try:
-        with open('current_menu.txt', 'r', encoding='utf-8') as f:
-            menu_text = f.read().strip()
-        if menu_text:
-            bot.sendMessage(chat_id, f"Menu hôm nay:\n{menu_text}\n\nVui lòng trả lời số thứ tự món bạn muốn đặt.")
-    except Exception:
-        pass
-    state.set_name("")
-    state.save()
-
-# --- /updateorder ---
-@processor(state_manager, from_states=state_types.All, update_types=['message'])
-def handle_updateorder(bot, update, state):
-    message = update.get_message()
-    chat = update.get_chat()
-    if message is None or message.get_text() is None or message.get_text().strip() != "/update":
-        return
-    chat_id = chat.get_id()
-    bot.sendMessage(chat_id, "Hãy gửi danh sách món ăn mới, mỗi món một dòng. Danh sách cũ sẽ bị thay thế.")
-    state.set_name("ASK_UPDATE_MENU")
-    state.save()
-
-# --- Nhận danh sách món mới, cập nhật menu và gửi cho tất cả user đã đăng ký ---
-@processor(state_manager, from_states=["ASK_UPDATE_MENU"], update_types=['message'])
-def save_update_menu(bot, update, state):
-    chat_id = update.get_chat().get_id()
-    menu_text = update.get_message().get_text().strip()
-    items = [line.strip() for line in menu_text.splitlines() if line.strip()]
-    if not items:
-        bot.sendMessage(chat_id, "Không có món nào được cập nhật.")
-        state.set_name("")
-        state.save()
-        return
-    MenuItem.objects.all().update(is_active=False)
-    for name in items:
-        obj, _ = MenuItem.objects.get_or_create(name=name)
-        obj.is_active = True
-        obj.save()
-    menu_numbered = "\n".join(f"{i+1}. {n}" for i, n in enumerate(items))
-    # Lưu menu mới nhất
     try:
         with open('current_menu.txt', 'w', encoding='utf-8') as f:
             f.write(menu_numbered)
@@ -258,6 +170,30 @@ def handle_list_orders(bot, update, state):
         bot.sendMessage(chat_id, f"Danh sách người đặt món hôm nay:\n" + "\n".join(lines))
     else:
         bot.sendMessage(chat_id, f"Chưa có ai đặt món hôm nay")
+
+
+# --- /delete ---
+@processor(state_manager, from_states=state_types.All, update_types=['message'])
+def handle_delete_self(bot, update, state):
+    message = update.get_message()
+    chat = update.get_chat()
+    if message is None or message.get_text() is None or message.get_text().strip() != "/delete":
+        return
+    chat_id = chat.get_id()
+    try:
+        db_chat = TelegramChat.objects.get(telegram_id=chat_id)
+        employee = Employee.objects.get(telegram_chat=db_chat)
+    except (TelegramChat.DoesNotExist, Employee.DoesNotExist):
+        bot.sendMessage(chat_id, "Bạn chưa đăng ký tài khoản hoặc đã xoá trước đó.")
+        return
+    # Xoá tất cả order và orderitem của user này
+    orders = Order.objects.filter(employee=employee)
+    OrderItem.objects.filter(order__in=orders).delete()
+    orders.delete()
+    # Xoá employee và telegramchat
+    employee.delete()
+    db_chat.delete()
+    bot.sendMessage(chat_id, "Tài khoản và tất cả đơn hàng của bạn đã được xoá vĩnh viễn. Nếu muốn dùng lại, hãy /start để đăng ký lại.")
 
 # --- /dsm ---
 @processor(state_manager, from_states=state_types.All, update_types=['message'])
