@@ -7,6 +7,56 @@ from django.db.models import Sum
 import pytz
 from datetime import datetime
 
+# --- /update ---
+@processor(state_manager, from_states=state_types.All, update_types=['message'])
+def handle_updateorder(bot, update, state):
+    message = update.get_message()
+    chat = update.get_chat()
+    if message is None or message.get_text() is None or message.get_text().strip() != "/update":
+        return
+    chat_id = chat.get_id()
+    bot.sendMessage(chat_id, "Hãy gửi danh sách món ăn mới, mỗi món một dòng. Danh sách cũ sẽ bị thay thế.")
+    state.set_name("ASK_UPDATE_MENU")
+    state.save()
+
+# --- Nhận danh sách món mới, cập nhật menu và gửi cho tất cả user đã đăng ký ---
+@processor(state_manager, from_states=["ASK_UPDATE_MENU"], update_types=['message'])
+def save_update_menu(bot, update, state):
+    chat_id = update.get_chat().get_id()
+    menu_text = update.get_message().get_text().strip()
+    items = [line.strip() for line in menu_text.splitlines() if line.strip()]
+    if not items:
+        bot.sendMessage(chat_id, "Không có món nào được cập nhật.")
+        state.set_name("")
+        state.save()
+        return
+    MenuItem.objects.all().update(is_active=False)
+    for name in items:
+        obj, _ = MenuItem.objects.get_or_create(name=name)
+        obj.is_active = True
+        obj.save()
+    menu_numbered = "\n".join(f"{i+1}. {n}" for i, n in enumerate(items))
+    # Lưu menu mới nhất
+    try:
+        with open('current_menu.txt', 'w', encoding='utf-8') as f:
+            f.write(menu_numbered)
+        # Lưu thời điểm cập nhật menu
+        with open('menu_last_updated.txt', 'w', encoding='utf-8') as f2:
+            f2.write(str(timezone.now().astimezone(pytz.timezone('Asia/Ho_Chi_Minh'))))
+    except Exception as e:
+        bot.sendMessage(chat_id, f"Lỗi khi lưu menu: {e}")
+    # Gửi menu mới cho tất cả user đã đăng ký
+    for emp in Employee.objects.select_related('telegram_chat').all():
+        if emp.name and emp.telegram_chat and emp.telegram_chat.telegram_id:
+            try:
+                bot.sendMessage(emp.telegram_chat.telegram_id, f"Menu hôm nay đã được cập nhật!\n{menu_numbered}\n\nĐã cập nhật menu")
+            except Exception:
+                pass
+    # Gửi lại menu cho người gửi (admin hoặc ai vừa cập nhật)
+    bot.sendMessage(chat_id, f"Menu hôm nay:\n{menu_numbered}\n\nMenu hôm nay đã được cập nhật!.")
+    state.set_name("")
+    state.save()
+
 # --- /start ---
 @processor(state_manager, from_states=state_types.All, update_types=['message'])
 def handle_start(bot, update, state):
