@@ -1,3 +1,54 @@
+# --- /start ---
+@processor(state_manager, from_states=state_types.All, update_types=['message'])
+def handle_start(bot, update, state):
+    message = update.get_message()
+    chat = update.get_chat()
+    if message is None or message.get_text() is None or message.get_text().strip() != "/start":
+        return
+    # Chỉ xử lý nếu là chat cá nhân (private)
+    if chat.get_type() != 'private':
+        return
+    chat_id = chat.get_id()
+    db_chat, _ = TelegramChat.objects.get_or_create(telegram_id=chat_id)
+    employee, created = Employee.objects.get_or_create(telegram_chat=db_chat)
+    if created or not employee.name:
+        bot.sendMessage(chat_id, "Chào bạn! Vui lòng cho tôi biết tên của bạn.")
+        state.set_name("ASK_NAME")
+        state.save()
+    else:
+        bot.sendMessage(chat_id, f"Xin chào {employee.name}!")
+        # Gửi menu hiện tại nếu có
+        try:
+            with open('current_menu.txt', 'r', encoding='utf-8') as f:
+                menu_text = f.read().strip()
+            if menu_text:
+                bot.sendMessage(chat_id, f"Menu hôm nay:\n{menu_text}\n\nVui lòng trả lời số thứ tự món bạn muốn đặt.")
+        except Exception:
+            pass
+
+# --- Lưu tên ---
+@processor(state_manager, from_states=['ASK_NAME'], update_types=['message'])
+def save_name(bot, update, state):
+    chat = update.get_chat()
+    if chat.get_type() != 'private':
+        return
+    chat_id = chat.get_id()
+    name = update.get_message().get_text().strip()
+    db_chat = TelegramChat.objects.get(telegram_id=chat_id)
+    employee = Employee.objects.get(telegram_chat=db_chat)
+    employee.name = name
+    employee.save()
+    bot.sendMessage(chat_id, f"Cảm ơn bạn, {name}! Bạn đã đăng ký thành công.")
+    # Gửi menu hiện tại nếu có
+    try:
+        with open('current_menu.txt', 'r', encoding='utf-8') as f:
+            menu_text = f.read().strip()
+        if menu_text:
+            bot.sendMessage(chat_id, f"Menu hôm nay:\n{menu_text}\n\nVui lòng trả lời số thứ tự món bạn muốn đặt.")
+    except Exception:
+        pass
+    state.set_name("")
+    state.save()
 
 from django_tgbot.decorators import processor
 from django_tgbot.state_manager import state_types
