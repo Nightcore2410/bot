@@ -36,13 +36,19 @@ def save_update_menu(bot, update, state):
         obj.is_active = True
         obj.save()
     menu_numbered = "\n".join(f"{i+1}. {n}" for i, n in enumerate(items))
+    # Xoá tất cả order và orderitem kể từ thời điểm cập nhật menu mới
+    # (xoá mọi order có created_at >= thời điểm cập nhật menu này)
+    menu_update_time = timezone.now()
+    all_orders = Order.objects.filter(created_at__gte=menu_update_time)
+    OrderItem.objects.filter(order__in=all_orders).delete()
+    all_orders.delete()
     # Lưu menu mới nhất
     try:
         with open('current_menu.txt', 'w', encoding='utf-8') as f:
             f.write(menu_numbered)
         # Lưu thời điểm cập nhật menu
         with open('menu_last_updated.txt', 'w', encoding='utf-8') as f2:
-            f2.write(str(timezone.now().astimezone(pytz.timezone('Asia/Ho_Chi_Minh'))))
+            f2.write(str(menu_update_time.astimezone(pytz.timezone('Asia/Ho_Chi_Minh'))))
     except Exception as e:
         bot.sendMessage(chat_id, f"Lỗi khi lưu menu: {e}")
     # Gửi menu mới cho tất cả user đã đăng ký
