@@ -130,42 +130,9 @@ def handle_thongbao(bot, update, state):
     if int(chat_id) not in [int(i) for i in admin_ids]:
         bot.sendMessage(chat_id, "Bạn không có quyền gửi thông báo.")
         return
-    send_daily_reminder(bot)
     bot.sendMessage(chat_id, "Đã gửi thông báo nhắc nhở tới tất cả user!")
 
-# Hàm gửi thông báo tới tất cả user vào 9:05 sáng giờ Việt Nam
-def send_daily_reminder(bot, message_text=None, user_id_list=None):
-    if message_text is None:
-        message_text = "Nhắc nhở: ai chưa đặt thì đặt món ăn trước 9h10 nhé"
-    # Lấy danh sách user id nếu chưa truyền vào
-    if user_id_list is None:
-        # Lấy tất cả user đã đăng ký
-        all_users = Employee.objects.filter(name__isnull=False, telegram_chat__telegram_id__isnull=False)
-        # Lấy danh sách user đã đặt món hôm nay
-        today = timezone.now().date()
-        ordered_user_ids = set(int(i) for i in Order.objects.filter(created_at__date=today).values_list('employee__telegram_chat__telegram_id', flat=True) if i is not None)
-        # Lọc ra những user chưa đặt món, so sánh kiểu int và loại None
-        user_id_list = [int(emp.telegram_chat.telegram_id) for emp in all_users if emp.telegram_chat.telegram_id is not None and int(emp.telegram_chat.telegram_id) not in ordered_user_ids]
 
-    try:
-        with open('current_menu.txt', 'w', encoding='utf-8') as f:
-            f.write(menu_numbered)
-        # Lưu thời điểm cập nhật menu
-        with open('menu_last_updated.txt', 'w', encoding='utf-8') as f2:
-            f2.write(str(timezone.now().astimezone(pytz.timezone('Asia/Ho_Chi_Minh'))))
-    except Exception as e:
-        bot.sendMessage(chat_id, f"Lỗi khi lưu menu: {e}")
-    # Gửi menu mới cho tất cả user đã đăng ký
-    for emp in Employee.objects.select_related('telegram_chat').all():
-        if emp.name and emp.telegram_chat and emp.telegram_chat.telegram_id:
-            try:
-                bot.sendMessage(emp.telegram_chat.telegram_id, f"Menu hôm nay đã được cập nhật!\n{menu_numbered}\n\nĐã cập nhật menu")
-            except Exception:
-                pass
-    # Gửi lại menu cho người gửi (admin hoặc ai vừa cập nhật)
-    bot.sendMessage(chat_id, f"Menu hôm nay:\n{menu_numbered}\n\nMenu hôm nay đã được cập nhật!.")
-    state.set_name("")
-    state.save()
 
 # --- Nhận số thứ tự món từ user, lưu order, cảnh báo nếu sai ---
 @processor(state_manager, from_states=state_types.All, update_types=['message'])
