@@ -1,3 +1,141 @@
+# --- /+ ---
+@processor(state_manager, from_states=state_types.All, update_types=['message'])
+def handle_plus_order(bot, update, state):
+    message = update.get_message()
+    chat = update.get_chat()
+    if message is None or message.get_text() is None or message.get_text().strip() != "/+":
+        return
+    chat_id = chat.get_id()
+    # Gửi menu hiện tại nếu có
+    try:
+        with open('current_menu.txt', 'r', encoding='utf-8') as f:
+            menu_text = f.read().strip()
+        if menu_text:
+            bot.sendMessage(chat_id, f"Menu hôm nay:\n{menu_text}\n\nTrả lời số thứ tự món bạn muốn đặt thêm.")
+    except Exception:
+        bot.sendMessage(chat_id, "Không tìm thấy menu. Vui lòng liên hệ admin để cập nhật menu.")
+        return
+    state.set_name("THEM_MON_PLUS")
+    state.save()
+
+# --- Nhận số thứ tự món từ user để thêm món mới vào order (không xoá món cũ, cho lệnh /+) ---
+@processor(state_manager, from_states=["THEM_MON_PLUS"], update_types=['message'])
+def save_plus_mon(bot, update, state):
+    chat = update.get_chat()
+    if chat.get_type() != 'private':
+        return
+    chat_id = chat.get_id()
+    text = update.get_message().get_text().strip()
+    # Kiểm tra số thứ tự
+    try:
+        idx = int(text) - 1
+    except ValueError:
+        bot.sendMessage(chat_id, "Vui lòng nhập số thứ tự món muốn đặt thêm.")
+        return
+    # Đọc menu hiện tại
+    try:
+        with open('current_menu.txt', 'r', encoding='utf-8') as f:
+            menu_lines = [line.strip() for line in f.readlines() if line.strip()]
+    except Exception:
+        bot.sendMessage(chat_id, "Không tìm thấy menu. Vui lòng liên hệ admin để cập nhật menu.")
+        state.set_name("")
+        state.save()
+        return
+    if idx < 0 or idx >= len(menu_lines):
+        bot.sendMessage(chat_id, f"Số thứ tự không hợp lệ. Chọn số từ 1 đến {len(menu_lines)}.")
+        return
+    menu_name = menu_lines[idx].split('. ', 1)[-1] if '. ' in menu_lines[idx] else menu_lines[idx]
+    db_chat, _ = TelegramChat.objects.get_or_create(telegram_id=chat_id)
+    try:
+        employee = Employee.objects.get(telegram_chat=db_chat)
+    except Employee.DoesNotExist:
+        bot.sendMessage(chat_id, "Bạn chưa đăng ký tên. Vui lòng gửi /start và nhập tên trước khi đặt món.")
+        return
+    today = timezone.now().date()
+    order, _ = Order.objects.get_or_create(employee=employee, created_at__date=today)
+    # Nếu không tìm thấy món trong DB, tự động thêm vào DB và đánh dấu is_active=True
+    menu_item = MenuItem.objects.filter(name=menu_name, is_active=True).first()
+    if not menu_item:
+        menu_item, created = MenuItem.objects.get_or_create(name=menu_name)
+        menu_item.is_active = True
+        menu_item.save()
+    # Nếu đã có OrderItem cho món này thì tăng số lượng, chưa có thì tạo mới
+    order_item, created = OrderItem.objects.get_or_create(order=order, menu_item=menu_item, defaults={'quantity': 1})
+    if not created:
+        order_item.quantity += 1
+        order_item.save()
+    bot.sendMessage(chat_id, f"Đã thêm món: {menu_name} vào đơn. Nếu muốn thêm nữa, hãy gửi /+ tiếp.")
+    state.set_name("")
+    state.save()
+# --- /them ---
+@processor(state_manager, from_states=state_types.All, update_types=['message'])
+def handle_them_order(bot, update, state):
+    message = update.get_message()
+    chat = update.get_chat()
+    if message is None or message.get_text() is None or message.get_text().strip() != "/them":
+        return
+    chat_id = chat.get_id()
+    # Gửi menu hiện tại nếu có
+    try:
+        with open('current_menu.txt', 'r', encoding='utf-8') as f:
+            menu_text = f.read().strip()
+        if menu_text:
+            bot.sendMessage(chat_id, f"Menu hôm nay:\n{menu_text}\n\nTrả lời số thứ tự món bạn muốn đặt thêm.")
+    except Exception:
+        bot.sendMessage(chat_id, "Không tìm thấy menu. Vui lòng liên hệ admin để cập nhật menu.")
+        return
+    state.set_name("THEM_MON")
+    state.save()
+
+# --- Nhận số thứ tự món từ user để thêm món mới vào order (không xoá món cũ) ---
+@processor(state_manager, from_states=["THEM_MON"], update_types=['message'])
+def save_them_mon(bot, update, state):
+    chat = update.get_chat()
+    if chat.get_type() != 'private':
+        return
+    chat_id = chat.get_id()
+    text = update.get_message().get_text().strip()
+    # Kiểm tra số thứ tự
+    try:
+        idx = int(text) - 1
+    except ValueError:
+        bot.sendMessage(chat_id, "Vui lòng nhập số thứ tự món muốn đặt thêm.")
+        return
+    # Đọc menu hiện tại
+    try:
+        with open('current_menu.txt', 'r', encoding='utf-8') as f:
+            menu_lines = [line.strip() for line in f.readlines() if line.strip()]
+    except Exception:
+        bot.sendMessage(chat_id, "Không tìm thấy menu. Vui lòng liên hệ admin để cập nhật menu.")
+        state.set_name("")
+        state.save()
+        return
+    if idx < 0 or idx >= len(menu_lines):
+        bot.sendMessage(chat_id, f"Số thứ tự không hợp lệ. Chọn số từ 1 đến {len(menu_lines)}.")
+        return
+    menu_name = menu_lines[idx].split('. ', 1)[-1] if '. ' in menu_lines[idx] else menu_lines[idx]
+    db_chat, _ = TelegramChat.objects.get_or_create(telegram_id=chat_id)
+    try:
+        employee = Employee.objects.get(telegram_chat=db_chat)
+    except Employee.DoesNotExist:
+        bot.sendMessage(chat_id, "Bạn chưa đăng ký tên. Vui lòng gửi /start và nhập tên trước khi đặt món.")
+        return
+    today = timezone.now().date()
+    order, _ = Order.objects.get_or_create(employee=employee, created_at__date=today)
+    # Nếu không tìm thấy món trong DB, tự động thêm vào DB và đánh dấu is_active=True
+    menu_item = MenuItem.objects.filter(name=menu_name, is_active=True).first()
+    if not menu_item:
+        menu_item, created = MenuItem.objects.get_or_create(name=menu_name)
+        menu_item.is_active = True
+        menu_item.save()
+    # Nếu đã có OrderItem cho món này thì tăng số lượng, chưa có thì tạo mới
+    order_item, created = OrderItem.objects.get_or_create(order=order, menu_item=menu_item, defaults={'quantity': 1})
+    if not created:
+        order_item.quantity += 1
+        order_item.save()
+    bot.sendMessage(chat_id, f"Đã thêm món: {menu_name} vào đơn. Nếu muốn thêm nữa, hãy gửi /them tiếp.")
+    state.set_name("")
+    state.save()
 from django_tgbot.decorators import processor
 from django_tgbot.state_manager import state_types
 from .bot import state_manager
