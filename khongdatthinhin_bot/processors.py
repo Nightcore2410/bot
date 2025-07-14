@@ -159,7 +159,7 @@ from datetime import datetime
 def handle_updateorder(bot, update, state):
     message = update.get_message()
     chat = update.get_chat()
-    if message is None or message.get_text() is None or message.get_text().strip() != "/update":
+    if message is None or message.get_text() is None or message.get_text().strip() != "/up":
         return
     chat_id = chat.get_id()
     bot.sendMessage(chat_id, "Hãy gửi danh sách món ăn mới, mỗi món một dòng. Danh sách cũ sẽ bị thay thế.")
