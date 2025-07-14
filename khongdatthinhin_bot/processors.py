@@ -1,3 +1,12 @@
+# Đảm bảo import đầy đủ các module cần thiết cho các decorator và biến sử dụng phía dưới
+from django_tgbot.decorators import processor
+from django_tgbot.state_manager import state_types
+from .bot import state_manager
+from .models import Employee, TelegramChat, MenuItem, Order, OrderItem, TelegramState
+from django.utils import timezone
+from django.db.models import Sum
+import pytz
+from datetime import datetime
 # --- /+ ---
 @processor(state_manager, from_states=state_types.All, update_types=['message'])
 def handle_plus_order(bot, update, state):
