@@ -287,7 +287,7 @@ def handle_thongbao(bot, update, state):
     for emp in all_emps:
         if emp.id not in ordered_emp_ids and emp.telegram_chat and emp.telegram_chat.telegram_id:
             try:
-                bot.sendMessage(emp.telegram_chat.telegram_id, "Bạn chưa đặt cơm hôm nay! Vui lòng đặt món trước 9h30 sáng nhé.")
+                bot.sendMessage(emp.telegram_chat.telegram_id, "Bạn chưa đặt cơm hôm nay! Vui lòng đặt món ")
                 count += 1
             except Exception:
                 pass
