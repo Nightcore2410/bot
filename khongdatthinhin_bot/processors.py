@@ -277,7 +277,21 @@ def handle_thongbao(bot, update, state):
     if int(chat_id) not in [int(i) for i in admin_ids]:
         bot.sendMessage(chat_id, "Bạn không có quyền gửi thông báo.")
         return
-    bot.sendMessage(chat_id, "Đã gửi thông báo nhắc nhở tới tất cả user!")
+    # Lấy danh sách user chưa đặt cơm hôm nay
+    today = timezone.now().date()
+    # Lấy tất cả Employee đã đăng ký
+    all_emps = Employee.objects.select_related('telegram_chat').all()
+    # Lấy id các employee đã có order hôm nay
+    ordered_emp_ids = set(Order.objects.filter(created_at__date=today).values_list('employee_id', flat=True))
+    count = 0
+    for emp in all_emps:
+        if emp.id not in ordered_emp_ids and emp.telegram_chat and emp.telegram_chat.telegram_id:
+            try:
+                bot.sendMessage(emp.telegram_chat.telegram_id, "Bạn chưa đặt cơm hôm nay! Vui lòng đặt món trước 9h30 sáng nhé.")
+                count += 1
+            except Exception:
+                pass
+    bot.sendMessage(chat_id, f"Đã gửi nhắc nhở tới {count} user chưa đặt cơm hôm nay.")
 
 
 
@@ -304,7 +318,7 @@ def collect_order_item(bot, update, state):
     except Exception:
         pass
     # Nếu đã quá 9h30 và menu đã được cập nhật trước 9h30 hôm nay thì khoá đặt món
-    lock_time = now_vn.replace(hour=9, minute=30, second=0, microsecond=0)
+    lock_time = now_vn.replace(hour=10, minute=00, second=0, microsecond=0)
     if now_vn > lock_time:
         if menu_last_updated is not None:
             # Nếu menu cập nhật trước 9h30 hôm nay thì khoá, còn nếu sau thì mở cho tới 9h30 hôm sau
