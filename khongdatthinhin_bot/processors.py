@@ -145,14 +145,6 @@ def save_them_mon(bot, update, state):
     bot.sendMessage(chat_id, f"Đã thêm món: {menu_name} vào đơn. Nếu muốn thêm nữa, hãy gửi /them tiếp.")
     state.set_name("")
     state.save()
-from django_tgbot.decorators import processor
-from django_tgbot.state_manager import state_types
-from .bot import state_manager
-from .models import Employee, TelegramChat, MenuItem, Order, OrderItem, TelegramState
-from django.utils import timezone
-from django.db.models import Sum
-import pytz
-from datetime import datetime
 
 # --- /update ---
 @processor(state_manager, from_states=state_types.All, update_types=['message'])
